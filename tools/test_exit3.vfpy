@@ -1,0 +1,7 @@
+from PythonQt import QtCore, QtGui, Qt
+from fontlab import *
+print("OK")
+ws = flWorkspace.instance()
+fontlab.notifyWorkspaceClosed(ws)
+main = ws.mainWindow
+print main.on_actionExit_triggered()

@@ -63,7 +63,7 @@ ensures that `fontmake` only builds anchor-based mark attachment (`mark` and `mk
 - Renamed glyphs in source to use `.glyphs`-compatible names
 - Added scripted build system (see Building)
 - Improved anchors for `mark` & `mkmk`, limiting them to non-accented Latin and Cyrillic base letters, and to combining marks.
-- Added `table STAT` definition in FEA — note: for this reason, the features don’t compile in FontLab. 
+- Added `table STAT` definition in FEA — note: for this reason, the features don’t compile in FontLab.
 - **TODO** Automate `STAT` building either via statmake or FEA. Right now it’s done via FEA but it’s stupid since the statics get the STAT for the VF. Perhaps just remove STAT from the statics in a postprocessing step
 
 ### Version 3.002.dev1 (2019-10-14)

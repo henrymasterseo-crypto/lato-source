@@ -1,36 +1,108 @@
 import os
 import os.path
 import glob
+from collections import OrderedDict
 from fontlab import *
-from PythonQt import QtGui
+from PythonQt import QtCore, QtGui, Qt
 ws = flWorkspace.instance()
 main = ws.mainWindow
 item = flItems
 qapp = QtGui.QApplication.instance()
 pref = flPreferences()
-
+settings = QtCore.QSettings('Fontlab', 'fontlab7')
 cwd = os.path.dirname(__file__)
-fontRelFolder = os.path.join(cwd, '..', 'sources')
-outRelFolder = os.path.join(cwd, '..', 'build')
+
+
+def log(s):
+    main.doOutput(s + u'\n', True)
+
+
+class ExportProfiles(object):
+    def __init__(self):
+        self.profiles = OrderedDict()
+        self._tempProfileNames = set([])
+        self._readAll()
+
+    def _uniqName(self, profileName):
+        if profileName in self.profiles:
+            return self._uniqName(profileName + u'1')
+        else:
+            return profileName
+
+    def _readAll(self):
+        settingsProfiles = settings.value(u'profiles')
+        for profileText in settingsProfiles:
+            profileName, profileContent = self._parse(profileText)
+            self.profiles[self._uniqName(profileName)] = profileContent
+
+    def _parse(self, profileText):
+        profileLines = profileText.splitlines()
+        profileName = profileLines[0].split(u' = ')[1].strip(u'"')
+        profileContent = OrderedDict()
+        for profileLine in profileLines[1:]:
+            profileKey, profileVal = profileLine.split(u' = ')
+            profileContent[profileKey] = profileVal
+        return profileName, profileContent
+
+    def _repr(self, profileName):
+        profileContent = self.profiles.get(profileName, None)
+        strProfile = u''
+        if profileContent:
+            strProfile += u'ProfileName = "%s"\n' % (profileName)
+            for profileKey, profileVal in profileContent.items():
+                strProfile += u'%s = %s\n' % (profileKey, profileVal)
+        return strProfile
+
+    def loadFile(self, profilePath):
+        with open(profilePath, 'r') as profileFile:
+            profileText = profileFile.read()
+        profileName, profileContent = self._parse(profileText)
+        profileName += u'D'  # TODO
+        if not profileName in self.profiles.keys():
+            self._tempProfileNames.add(profileName)
+        self.profiles[profileName] = profileContent
+        self.update()
+        return profileName
+
+    def saveFile(self, profileName, profilePath):
+        profileText = self._repr(profileName)
+        if profileText:
+            with open(profilePath, 'w') as profileFile:
+                profileFile.write(profileText)
+        else:
+            log('Profile %s not found' % (profileName))
+
+    def remove(self, profileName):
+        if profileName in self.profiles.keys():
+            del self.profiles[profileName]
+
+    def cleanUp(self):
+        for profileName in self._tempProfileNames:
+            self.remove(profileName)
+        self._tempProfileNames = set([])
+        self.update()
+
+    def update(self):
+        listProfiles = []
+        for profileName in self.profiles.keys():
+            listProfiles.append(self._repr(profileName))
+        settings.setValue(u'profiles', tuple(listProfiles))
+        ec = ExportControl()
+        ec.load()
+        ec.store()
+
+
+profiles = ExportProfiles()
+
 
 class ExportFont(object):
-
-    def __init__(self):
-        self.fontFolder = None
-        self.fontPaths = None
+    def __init__(self, outBaseFolder=None):
+        if outBaseFolder:
+            self.outBaseFolder = outBaseFolder
+        else:
+            self.outBaseFolder = None
         self.fontPath = None
         self.fp = None
-
-    def getFontPaths(self, fontFolder = None):
-        if not fontFolder:
-            self.fontFolder = fontRelFolder
-        self.fontPaths = glob.glob(os.path.join(self.fontFolder, '*.vfj'))
-        if not len(self.fontPaths):
-            self.fontFolder = QtGui.QFileDialog.getExistingDirectory(None, 'Choose folder with VFJ files', self.fontFolder, QFileDialog.ShowDirsOnly)
-            if self.fontFolder:
-                self.fontPaths = glob.glob(os.path.join(self.fontFolder, '*.vfj'))
-        if not len(self.fontPaths):
-            print("No VFJ files found in folder!")
 
     def openFont(self, fontPath):
         main.loadFont(fontPath)
@@ -38,47 +110,117 @@ class ExportFont(object):
         self.fg = CurrentFont()
         self.fontPath = self.fp.path
         self.subFolder = os.path.splitext(os.path.basename(self.fontPath))[0]
-        #print(self.fp, self.fg)
+        #log(self.fp, self.fg)
 
-    def exportFontDSUFO(self, outFolder = None):
+    def exportFontDSUFO(self, outFolder=None):
         if not outFolder:
-            outFolder = os.path.join(outRelFolder, self.subFolder, 'ds-ufo')
+            outFolder = os.path.join(
+                self.outBaseFolder, self.subFolder, 'ds-ufo')
         if not os.path.isdir(outFolder):
             os.makedirs(outFolder)
         ec = ExportControl()
-        ec.profileName = "DesignSpace + UFO"
+        ec.profileName = u'DesignSpace + UFO'
         ec.destinationMode = pref.DestinationFolder
         ec.conflictMode = pref.ConflictOverwrite
         ec.contentMode = pref.ContentInstances
         ec.destinationFolder = outFolder
         ec.groupProfiles = False
         ec.groupFamily = False
+        #log('EXPORT %s / %s' % (ec.profileName, type(ec.profileName)))
         ws.exportFont(self.fp, ec)
 
-    def exportFontInstUFO(self, outFolder = None):
+    def exportFontInstUFO(self, fontProfile=None, outFolder=None):
         if not outFolder:
-            outFolder = os.path.join(outRelFolder, self.subFolder, 'ds-ufo', 'masters')
+            outFolder = os.path.join(
+                self.outBaseFolder, self.subFolder, 'ds-ufo', 'masters')
         if not os.path.isdir(outFolder):
             os.makedirs(outFolder)
         ec = ExportControl()
-        ec.profileName = "UFO Package"
+        ec.init()
+        ec.load()
+        ec.store()
+        if not fontProfile:
+            fontProfile = u'UFO Package'
+        ec.profileName = fontProfile
         ec.destinationMode = pref.DestinationFolder
         ec.conflictMode = pref.ConflictOverwrite
         ec.contentMode = pref.ContentInstances
         ec.destinationFolder = outFolder
         ec.groupProfiles = False
         ec.groupFamily = False
+        #log('EXPORT %s / %s' % (ec.profileName, type(ec.profileName)))
         ws.exportFont(self.fp, ec)
+
+
+class LatoFontLabExport(object):
+
+    def __init__(self, toolFolder=None):
+        if toolFolder:
+            self.toolFolder = toolFolder
+        else:
+            self.toolFolder = cwd
+        self.fontFolder = os.path.join(self.toolFolder, '..', 'sources')
+        self.outBaseFolder = os.path.join(self.toolFolder, '..', 'build')
+        self.fontSpecs = {}
+
+        self.baseFonts = [
+            'Lato3Upr',
+            'Lato3Ita'
+        ]
+        self.main()
+
+    def getFontSpecs(self, fontFolder=None, baseFonts=None):
+        if fontFolder:
+            self.fontFolder = fontFolder
+        if baseFonts:
+            self.baseFonts = baseFonts
+        for baseFont in self.baseFonts:
+            fontPaths = tuple(glob.glob(
+                os.path.join(self.fontFolder, '%s*.vfj' % baseFont)
+            ))
+            fontProfiles = tuple(glob.glob(
+                os.path.join(self.fontFolder, '%s*.fl_profile' % baseFont)
+            ))
+            self.fontSpecs[fontPaths] = fontProfiles
+        if not len(self.fontSpecs.keys()):
+            self.fontFolder = QtGui.QFileDialog.getExistingDirectory(
+                None, 'Choose folder with VFJ files', self.fontFolder, QFileDialog.ShowDirsOnly)
+            if self.fontFolder:
+                fontPaths = tuple(glob.glob(
+                    os.path.join(self.fontFolder, '*.vfj')))
+                fontProfiles = None
+                self.fontSpecs[fontPaths] = fontProfiles
+        if not len(self.fontSpecs.keys()):
+            log("No VFJ files found in folder!")
 
     def main(self):
-        self.getFontPaths()
-        for fontPath in self.fontPaths:
-            print(fontPath)
-            self.openFont(fontPath)
-            self.exportFontDSUFO()
-            self.exportFontInstUFO()
+        self.getFontSpecs()
+        for fontPaths, fontProfiles in self.fontSpecs.items():
+            for fontPath in fontPaths:
+                log("Exporting %s..." % (fontPath))
+                export = ExportFont(outBaseFolder=self.outBaseFolder)
+                export.openFont(fontPath)
+                #log("...as DesignSpace + UFO...")
+                # export.exportFontDSUFO()
+                if fontProfiles:
+                    for fontProfilePath in fontProfiles:
+                        fontProfile = profiles.loadFile(
+                            fontProfilePath)
+                        log("...as %s..." % fontProfile)
+                        export.exportFontInstUFO(fontProfile=fontProfile)
+                        # TODO profiles.cleanUp()
+                else:
+                    exp.exportFontInstUFO()
+
 
 if __name__ == "__main__":
-    ex = ExportFont()
-    ex.main()
-    qapp.quit()
+    ep = ExportProfiles()
+    profile = ep.loadFile(os.path.join(
+        cwd, '..', 'sources', 'Lato3Ita.fl_profile'))
+    # ep.saveFile(profile, os.path.join(
+    #    cwd, '..', 'sources', 'Lato3Ita-OUT.fl_profile'))
+
+    ex = LatoFontLabExport()
+    # qapp.quit()
+    main.findChildren(QtGui.QAction, QtCore.QRegExp(
+        'Exit', Qt.Qt.CaseInsensitive))[0].trigger()

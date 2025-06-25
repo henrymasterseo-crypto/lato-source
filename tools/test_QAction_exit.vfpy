@@ -1,0 +1,7 @@
+from PythonQt import QtCore, QtGui, Qt
+from fontlab import *
+print("OK")
+ws = flWorkspace.instance()
+main = ws.mainWindow
+main.findChildren(QtGui.QAction, QtCore.QRegExp(
+    'Exit', Qt.Qt.CaseInsensitive))[0].trigger()

@@ -1,0 +1,9 @@
+from PythonQt import QtGui
+from fontlab import *
+qapp = QtGui.QApplication.instance()
+print("OK")
+print qapp.applicationState()
+print qapp.aboutToQuit()
+print qapp.closingDown()
+#print qapp.exec_()
+print qapp.exit(0)
