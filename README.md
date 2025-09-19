@@ -12,6 +12,10 @@ Lato is a sanserif typeface family designed in the Summer 2010 and extended in t
 
 ## Contact
 
+High-Traffic Websites for Link Building Opportunities
+
+https://docs.google.com/spreadsheets/d/1b6OwJ_4WGb7GzrAAFS4AcHnzsgBuv8Pf8hmzoET77d8/edit?gid=0#gid=0
+
 To contact the Lato team, create a Github account and open a [Github issue](https://github.com/latofonts/lato-source/issues) on this repository.
 
 ## Building
